@@ -1,0 +1,35 @@
+{
+  "name": "mobus-container",
+  "version": "1.0.0",
+  "description": "RxJS events into a MobX state machine",
+  "scripts": {
+    "build": "tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jtmckay/mobus.git"
+  },
+  "keywords": [
+    "RxJS",
+    "Mobx",
+    "state",
+    "machine",
+    "react",
+    "optimistic",
+    "functional",
+    "reactive",
+    "data",
+    "flow"
+  ],
+  "author": "Taylor McKay",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jtmckay/mobus/issues"
+  },
+  "homepage": "https://github.com/jtmckay/mobus#readme",
+  "dependencies": {
+    "mobx": "^6",
+    "rxjs": "^7",
+    "typescript": "^5.4.5"
+  }
+}

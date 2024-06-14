@@ -1,0 +1,35 @@
+{
+  "name": "mobus",
+  "version": "1.0.0",
+  "description": "RxJS events into a MobX state machine",
+  "main": "mobus.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jtmckay/mobus.git"
+  },
+  "keywords": [
+    "RxJS",
+    "Mobx",
+    "state",
+    "machine",
+    "react",
+    "optimistic",
+    "functional",
+    "reactive",
+    "data",
+    "flow"
+  ],
+  "author": "Taylor McKay",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jtmckay/mobus/issues"
+  },
+  "homepage": "https://github.com/jtmckay/mobus#readme",
+  "peerDependencies": {
+    "mobx": "^6",
+    "rxjs": "^7"
+  }
+}
