@@ -147,12 +147,12 @@ export function stateMachineFactory<Entity extends WithID>(
 
 export function useEntity<Entity extends WithID>(
   useEffect: (anon: () => void, dependencyArray: any[]) => void,
-  entity$: Observable<[Entity, MEvent<WithID>]>,
-  subscription?: ([entity, event]: [Entity, MEvent<WithID>]) => void
+  entity$: Observable<[Entity, MEvent<unknown>]>,
+  subscription?: ([entity, event]: [Entity, MEvent<unknown>]) => void
 ) {
   useEffect(() => {
     const sub = entity$
-      .pipe(filter(([_entity, event]: [Entity, MEvent<WithID>]) => event.status !== MEventStatus.Error))
+      .pipe(filter(([_entity, event]: [Entity, MEvent<unknown>]) => event.status !== MEventStatus.Error))
       .subscribe(subscription);
     return () => {
       sub.unsubscribe();
