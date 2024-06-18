@@ -21,31 +21,39 @@ export type MEvent<Command> = {
     status: MEventStatus;
     type: string;
 };
-export type CommandSubject<Entity, Command> = {
+export type CommandSubject<Entity extends WithID, Command> = {
     asyncEventHandler?: AsyncEntityEventHandler<Entity, Command>;
     cud: CUD;
     eventHandler?: EntityEventHandler<Entity, Command>;
     eventType: string;
     payload: Command;
 };
-export type EntityEventHandler<Entity, Command = Entity> = (entity: Entity | undefined, event: MEvent<Command>) => Entity;
-export type AsyncEntityEventHandler<Entity, Command = Entity> = (entity: Entity | undefined, event: MEvent<Command>) => Promise<Entity>;
+export type EntityEventHandler<Entity extends WithID, Command = Entity> = (entity: Entity | undefined, event: MEvent<Command>) => Entity;
+export type AsyncEntityEventHandler<Entity extends WithID, Command = Entity> = (entity: Entity | undefined, event: MEvent<Command>) => Promise<Entity>;
 export declare function stateMachineFactory<Entity extends WithID>(entityType: string, store: ObservableMap<string, Entity>, command$: Observable<CommandSubject<Entity, WithID>>, { parallel }?: {
     parallel?: boolean | undefined;
 }): Observable<[Entity, MEvent<unknown>]>;
-export declare function useEntity<Entity>(useEffect: (anon: () => void, dependencyArray: any[]) => void, entity$: Observable<[Entity, MEvent<WithID>]>, subscription?: ([entity, event]: [Entity, MEvent<WithID>]) => void): void;
-export declare function hydrateCommandFactory<Command, Entity = Command>(command$: Subject<CommandSubject<Entity, Command>>, eventType: string): (command: Command) => void;
-export declare function deleteCommandFactory<Command extends WithID, Entity = Command>(command$: Subject<CommandSubject<Entity, Command>>, eventType: string): (command: Command) => void;
+export declare function useEntity<Entity extends WithID>(useEffect: (anon: () => void, dependencyArray: any[]) => void, entity$: Observable<[Entity, MEvent<WithID>]>, subscription?: ([entity, event]: [Entity, MEvent<WithID>]) => void): void;
+export declare function hydrateCommandFactory<Entity extends WithID, Command = Entity>(command$: Subject<CommandSubject<Entity, Command>>, eventType: string): (command: Command) => void;
+export declare function deleteCommandFactory<Entity extends WithID, Command = Entity>(command$: Subject<CommandSubject<Entity, Command>>, eventType: string): (command: Command) => void;
 export type AtLeastOne<T, U = {
     [K in keyof T]: Pick<T, K>;
 }> = Partial<T> & U[keyof U];
-export declare function commandFactory<Command extends WithID | void, Entity = (Command | undefined) | undefined>({ command$, cud, eventType, eventHandler, asyncEventHandler, }: {
+export declare function commandFactory<Entity extends WithID, Command extends object | void = Entity>({ command$, cud, eventType, eventHandler, asyncEventHandler, }: {
     command$: Subject<CommandSubject<Entity, Command>>;
-    cud?: CUD;
+    cud?: CUD.create;
     eventType: string;
 } & AtLeastOne<{
     asyncEventHandler: AsyncEntityEventHandler<Entity, Command>;
     eventHandler: EntityEventHandler<Entity, Command>;
 }>): (command: Command) => void;
-export declare function definedEntity<Entity>(entity: Entity | undefined): NonNullable<Entity>;
+export declare function commandFactory<Entity extends WithID, Command extends WithID = Entity>({ command$, cud, eventType, eventHandler, asyncEventHandler, }: {
+    command$: Subject<CommandSubject<Entity, Command>>;
+    cud: CUD.update | CUD.delete;
+    eventType: string;
+} & AtLeastOne<{
+    asyncEventHandler: AsyncEntityEventHandler<Entity, Command>;
+    eventHandler: EntityEventHandler<Entity, Command>;
+}>): (command: Command) => void;
+export declare function definedEntity<Entity extends WithID>(entity: Entity | undefined): Entity;
 //# sourceMappingURL=mobus.d.ts.map

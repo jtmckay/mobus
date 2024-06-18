@@ -20,7 +20,7 @@ export const pedometer$ = stateMachineFactory(ENTITY, pedometerStore, command$, 
 // Start the engine immediately. More advanced: subscribe as needed
 pedometer$.subscribe();
 
-export const create = commandFactory<void, Pedometer>({
+export const create = commandFactory<Pedometer, void>({
   command$,
   cud: CUD.create,
   eventType: EVENT.Create,
@@ -32,7 +32,7 @@ export const create = commandFactory<void, Pedometer>({
   },
 });
 
-const step = commandFactory<WithID, Pedometer>({
+const step = commandFactory<Pedometer, WithID>({
   command$,
   cud: CUD.update,
   eventType: EVENT.TrackStep,
@@ -43,7 +43,7 @@ const step = commandFactory<WithID, Pedometer>({
   },
 });
 
-const syncHeartRate = commandFactory<WithID & { rate: number }, Pedometer>({
+const syncHeartRate = commandFactory<Pedometer, WithID & { rate: number }>({
   command$,
   cud: CUD.update,
   eventType: EVENT.Rate,

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "RxJS events into a MobX state machine",
   "scripts": {
-    "build": "tsc"
+    "build": "tsc && cp README.md ./package/README.md"
   },
   "repository": {
     "type": "git",

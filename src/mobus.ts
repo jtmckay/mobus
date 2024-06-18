@@ -27,7 +27,7 @@ export type MEvent<Command> = {
   type: string;
 };
 
-export type CommandSubject<Entity, Command> = {
+export type CommandSubject<Entity extends WithID, Command> = {
   asyncEventHandler?: AsyncEntityEventHandler<Entity, Command>;
   cud: CUD;
   eventHandler?: EntityEventHandler<Entity, Command>;
@@ -35,12 +35,12 @@ export type CommandSubject<Entity, Command> = {
   payload: Command;
 };
 
-export type EntityEventHandler<Entity, Command = Entity> = (
+export type EntityEventHandler<Entity extends WithID, Command = Entity> = (
   entity: Entity | undefined,
   event: MEvent<Command>
 ) => Entity;
 
-export type AsyncEntityEventHandler<Entity, Command = Entity> = (
+export type AsyncEntityEventHandler<Entity extends WithID, Command = Entity> = (
   entity: Entity | undefined,
   event: MEvent<Command>
 ) => Promise<Entity>;
@@ -145,7 +145,7 @@ export function stateMachineFactory<Entity extends WithID>(
   );
 }
 
-export function useEntity<Entity>(
+export function useEntity<Entity extends WithID>(
   useEffect: (anon: () => void, dependencyArray: any[]) => void,
   entity$: Observable<[Entity, MEvent<WithID>]>,
   subscription?: ([entity, event]: [Entity, MEvent<WithID>]) => void
@@ -160,7 +160,7 @@ export function useEntity<Entity>(
   }, [entity$, subscription]);
 }
 
-export function hydrateCommandFactory<Command, Entity = Command>(
+export function hydrateCommandFactory<Entity extends WithID, Command = Entity>(
   command$: Subject<CommandSubject<Entity, Command>>,
   eventType: string
 ): (command: Command) => void {
@@ -175,7 +175,7 @@ export function hydrateCommandFactory<Command, Entity = Command>(
   return commandFunction;
 }
 
-export function deleteCommandFactory<Command extends WithID, Entity = Command>(
+export function deleteCommandFactory<Entity extends WithID, Command = Entity>(
   command$: Subject<CommandSubject<Entity, Command>>,
   eventType: string
 ): (command: Command) => void {
@@ -192,7 +192,39 @@ export function deleteCommandFactory<Command extends WithID, Entity = Command>(
 
 export type AtLeastOne<T, U = { [K in keyof T]: Pick<T, K> }> = Partial<T> & U[keyof U];
 
-export function commandFactory<Command extends WithID | void, Entity = (Command | undefined) | undefined>({
+// Overload for CUD.create (ID is unnecessary)
+export function commandFactory<Entity extends WithID, Command extends object | void = Entity>({
+  command$,
+  cud,
+  eventType,
+  eventHandler,
+  asyncEventHandler,
+}: {
+  command$: Subject<CommandSubject<Entity, Command>>;
+  cud?: CUD.create;
+  eventType: string;
+} & AtLeastOne<{
+  asyncEventHandler: AsyncEntityEventHandler<Entity, Command>;
+  eventHandler: EntityEventHandler<Entity, Command>;
+}>): (command: Command) => void;
+
+// Overload for other CUD types (ID is necessary)
+export function commandFactory<Entity extends WithID, Command extends WithID = Entity>({
+  command$,
+  cud,
+  eventType,
+  eventHandler,
+  asyncEventHandler,
+}: {
+  command$: Subject<CommandSubject<Entity, Command>>;
+  cud: CUD.update | CUD.delete;
+  eventType: string;
+} & AtLeastOne<{
+  asyncEventHandler: AsyncEntityEventHandler<Entity, Command>;
+  eventHandler: EntityEventHandler<Entity, Command>;
+}>): (command: Command) => void;
+
+export function commandFactory<Entity extends WithID, Command extends WithID | void = Entity>({
   command$,
   cud = CUD.create,
   eventType,
@@ -219,7 +251,7 @@ export function commandFactory<Command extends WithID | void, Entity = (Command 
   return commandFunction;
 }
 
-export function definedEntity<Entity>(entity: Entity | undefined) {
+export function definedEntity<Entity extends WithID>(entity: Entity | undefined) {
   if (!entity) {
     throw new Error('Entity does not exist');
   }
