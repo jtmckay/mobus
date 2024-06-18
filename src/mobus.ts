@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { runInAction, type ObservableMap } from 'mobx';
-import { concatMap, filter, mergeMap, share, type Observable, type Subject } from 'rxjs';
+import { concatMap, mergeMap, share, type Observable, type Subject } from 'rxjs';
 
 export enum CUD {
   create = 'create',
@@ -152,7 +152,6 @@ export function useEntity<Entity extends WithID>(
 ) {
   useEffect(() => {
     const sub = entity$
-      .pipe(filter(([_entity, event]: [Entity, MEvent<unknown>]) => event.status !== MEventStatus.Error))
       .subscribe(subscription);
     return () => {
       sub.unsubscribe();
