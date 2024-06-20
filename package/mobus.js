@@ -9,28 +9,29 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.definedEntity = exports.commandFactory = exports.deleteCommandFactory = exports.hydrateCommandFactory = exports.useEntity = exports.stateMachineFactory = exports.MEventStatus = exports.CUD = void 0;
+exports.definedEntity = exports.stateMachineFactory = exports.MEventStatus = exports.StoreOperation = void 0;
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 const mobx_1 = require("mobx");
 const rxjs_1 = require("rxjs");
-var CUD;
-(function (CUD) {
-    CUD["create"] = "create";
-    CUD["delete"] = "delete";
-    CUD["update"] = "update";
-})(CUD || (exports.CUD = CUD = {}));
+var StoreOperation;
+(function (StoreOperation) {
+    StoreOperation["set"] = "set";
+    StoreOperation["delete"] = "delete";
+    StoreOperation["mutate"] = "mutate";
+})(StoreOperation || (exports.StoreOperation = StoreOperation = {}));
 var MEventStatus;
 (function (MEventStatus) {
     MEventStatus["Complete"] = "complete";
     MEventStatus["Error"] = "error";
     MEventStatus["Pending"] = "pending";
 })(MEventStatus || (exports.MEventStatus = MEventStatus = {}));
-function stateMachineFactory(entityType, store, command$, { parallel = false } = {}) {
-    return command$.pipe(
+function stateMachineFactory(entityType, store, { parallel = false } = {}) {
+    const command$ = new rxjs_1.Subject();
+    const entity$ = command$.pipe(
     // eslint-disable-next-line complexity
     (parallel ? rxjs_1.mergeMap : rxjs_1.concatMap)((command) => __awaiter(this, void 0, void 0, function* () {
         const event = {
-            cud: command.cud,
+            op: command.op,
             entityInStore: false,
             entityName: entityType,
             payload: command.payload,
@@ -48,13 +49,13 @@ function stateMachineFactory(entityType, store, command$, { parallel = false } =
         }
         if (command.eventHandler) {
             try {
-                if (command.cud === CUD.create) {
+                if (command.op === StoreOperation.set) {
                     entityResult = command.eventHandler(entity, event);
                     (0, mobx_1.runInAction)(() => {
                         store.set(entityResult.id, entityResult);
                     });
                 }
-                else if (command.cud === CUD.delete) {
+                else if (command.op === StoreOperation.delete) {
                     (0, mobx_1.runInAction)(() => {
                         store.delete(entityResult.id);
                     });
@@ -85,13 +86,13 @@ function stateMachineFactory(entityType, store, command$, { parallel = false } =
         if (command.asyncEventHandler) {
             event.status = MEventStatus.Complete;
             try {
-                if (command.cud === CUD.create) {
+                if (command.op === StoreOperation.set) {
                     entityResult = yield command.asyncEventHandler(entity, event);
                     (0, mobx_1.runInAction)(() => {
                         store.set(entityResult.id, entityResult);
                     });
                 }
-                else if (command.cud === CUD.delete) {
+                else if (command.op === StoreOperation.delete) {
                     (0, mobx_1.runInAction)(() => {
                         store.delete(entityResult.id);
                     });
@@ -119,56 +120,43 @@ function stateMachineFactory(entityType, store, command$, { parallel = false } =
                 }
             }
         }
+        if (!command.eventHandler && !command.asyncEventHandler && command.payload.id) {
+            (0, mobx_1.runInAction)(() => {
+                store.set(command.payload.id, command.payload);
+            });
+        }
         return [entityResult, event];
     })), (0, rxjs_1.share)());
+    // Implementation
+    function commandFactory({ op = StoreOperation.set, eventType, eventHandler, asyncEventHandler, }) {
+        function commandFunction(command) {
+            command$.next({
+                payload: command,
+                op,
+                eventType,
+                eventHandler,
+                asyncEventHandler,
+            });
+        }
+        return commandFunction;
+    }
+    function useEntity(useEffect, subscription) {
+        useEffect(() => {
+            const sub = entity$.subscribe(subscription);
+            return () => {
+                sub.unsubscribe();
+            };
+        }, [entity$, subscription]);
+    }
+    return {
+        entity$,
+        command$,
+        commandFactory,
+        useEntity,
+        subscribe: () => entity$.subscribe()
+    };
 }
 exports.stateMachineFactory = stateMachineFactory;
-function useEntity(useEffect, entity$, subscription) {
-    useEffect(() => {
-        const sub = entity$
-            .pipe((0, rxjs_1.filter)(([_entity, event]) => event.status !== MEventStatus.Error))
-            .subscribe(subscription);
-        return () => {
-            sub.unsubscribe();
-        };
-    }, [entity$, subscription]);
-}
-exports.useEntity = useEntity;
-function hydrateCommandFactory(command$, eventType) {
-    function commandFunction(command) {
-        command$.next({
-            payload: command,
-            cud: CUD.create,
-            eventType,
-        });
-    }
-    return commandFunction;
-}
-exports.hydrateCommandFactory = hydrateCommandFactory;
-function deleteCommandFactory(command$, eventType) {
-    function commandFunction(command) {
-        command$.next({
-            payload: command,
-            cud: CUD.delete,
-            eventType,
-        });
-    }
-    return commandFunction;
-}
-exports.deleteCommandFactory = deleteCommandFactory;
-function commandFactory({ command$, cud = CUD.create, eventType, eventHandler, asyncEventHandler, }) {
-    function commandFunction(command) {
-        command$.next({
-            payload: command,
-            cud,
-            eventType,
-            eventHandler,
-            asyncEventHandler,
-        });
-    }
-    return commandFunction;
-}
-exports.commandFactory = commandFactory;
 function definedEntity(entity) {
     if (!entity) {
         throw new Error('Entity does not exist');

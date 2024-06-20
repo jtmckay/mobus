@@ -42,6 +42,7 @@ graph TD
 ### Example store
 
 ```
+// src/domain/pedometer.store.ts
 import { observable } from 'mobx';
 
 export type Pedometer = {
@@ -55,27 +56,35 @@ export const pedometerStore = observable<string, Pedometer>(new Map());
 ### Example bus
 
 ```
+// src/domain/pedometer.bus.ts
 import {
-  stateMachineFactory
+  MEvent,
+  stateMachineFactory,
 } from 'mobus';
 import { Subject } from 'rxjs';
 import { ENTITY } from './pedometer.constants';
 import { pedometerStore } from './pedometer.store';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const command$ = new Subject<any>();
-export const pedometer$ = stateMachineFactory(ENTITY, pedometerStore, command$, { parallel: true });
+export const {
+  commandFactory,
+  subscribe,
+  useEntity
+} = stateMachineFactory(ENTITY, pedometerStore, { parallel: true });
+
+export function usePedometerService(subscription?: ([estimate]: [Pedometer, MEvent<unknown>]) => void) {
+  useEntity(useEffect, subscription);
+}
 
 // Start the engine immediately. More advanced: subscribe as needed
-pedometer$.subscribe();
+subscribe();
 ```
 
 ### Example optimistic updates
 
 ```
-const syncHeartRate = commandFactory<WithID & { rate: number }, Pedometer>({
-  command$,
-  cud: CUD.update,
+// src/domain/pedometer.bus.ts cont.
+const syncHeartRate = commandFactory<WithID & { rate: number }>({
+  op: StoreOperation.mutate,
   eventType: EVENT.Rate,
   eventHandler: (entity, event) => {
     const pedometer = definedEntity(entity);

@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { runInAction, type ObservableMap } from 'mobx';
-import { concatMap, mergeMap, share, type Observable, type Subject } from 'rxjs';
+import { Subject, concatMap, mergeMap, share, type Observable } from 'rxjs';
 
-export enum CUD {
-  create = 'create',
+export enum StoreOperation {
+  set = 'set',
   delete = 'delete',
-  update = 'update',
+  mutate = 'mutate',
 }
 
 export enum MEventStatus {
@@ -19,7 +19,7 @@ export type WithID = {
 };
 
 export type MEvent<Command> = {
-  cud: CUD;
+  op: StoreOperation;
   entityInStore: boolean;
   entityName: string;
   payload: Command;
@@ -29,7 +29,7 @@ export type MEvent<Command> = {
 
 export type CommandSubject<Entity extends WithID, Command> = {
   asyncEventHandler?: AsyncEntityEventHandler<Entity, Command>;
-  cud: CUD;
+  op: StoreOperation;
   eventHandler?: EntityEventHandler<Entity, Command>;
   eventType: string;
   payload: Command;
@@ -45,17 +45,19 @@ export type AsyncEntityEventHandler<Entity extends WithID, Command = Entity> = (
   event: MEvent<Command>
 ) => Promise<Entity>;
 
+export type AtLeastOne<T, U = { [K in keyof T]: Pick<T, K> }> = Partial<T> & U[keyof U];
+
 export function stateMachineFactory<Entity extends WithID>(
   entityType: string,
   store: ObservableMap<string, Entity>,
-  command$: Observable<CommandSubject<Entity, WithID>>,
   { parallel = false } = {}
-): Observable<[Entity, MEvent<unknown>]> {
-  return command$.pipe(
+) {
+  const command$ = new Subject() as Observable<CommandSubject<Entity, WithID>>;
+  const entity$ = command$.pipe(
     // eslint-disable-next-line complexity
     (parallel ? mergeMap : concatMap)(async (command: CommandSubject<Entity, WithID>) => {
       const event: MEvent<WithID> = {
-        cud: command.cud,
+        op: command.op,
         entityInStore: false,
         entityName: entityType,
         payload: command.payload,
@@ -74,12 +76,12 @@ export function stateMachineFactory<Entity extends WithID>(
       }
       if (command.eventHandler) {
         try {
-          if (command.cud === CUD.create) {
+          if (command.op === StoreOperation.set) {
             entityResult = command.eventHandler(entity, event);
             runInAction(() => {
               store.set(entityResult!.id, entityResult!);
             });
-          } else if (command.cud === CUD.delete) {
+          } else if (command.op === StoreOperation.delete) {
             runInAction(() => {
               store.delete(entityResult!.id);
             });
@@ -108,12 +110,12 @@ export function stateMachineFactory<Entity extends WithID>(
       if (command.asyncEventHandler) {
         event.status = MEventStatus.Complete;
         try {
-          if (command.cud === CUD.create) {
+          if (command.op === StoreOperation.set) {
             entityResult = await command.asyncEventHandler(entity, event);
             runInAction(() => {
               store.set(entityResult!.id, entityResult!);
             });
-          } else if (command.cud === CUD.delete) {
+          } else if (command.op === StoreOperation.delete) {
             runInAction(() => {
               store.delete(entityResult!.id);
             });
@@ -139,115 +141,87 @@ export function stateMachineFactory<Entity extends WithID>(
         }
       }
 
+      if (!command.eventHandler && !command.asyncEventHandler && command.payload.id) {
+        runInAction(() => {
+          store.set(command.payload.id, command.payload as Entity);
+        });
+      }
+
       return [entityResult, event] as [Entity, MEvent<WithID>];
     }),
     share()
   );
-}
+  // Overload No ID requires a handler
+  function commandFactory<Command extends object | void>({
+    op,
+    eventType,
+    eventHandler,
+    asyncEventHandler,
+  }: {
+    op: StoreOperation.set;
+    eventType: string;
+  } & AtLeastOne<{
+    asyncEventHandler: AsyncEntityEventHandler<Entity, Command>;
+    eventHandler: EntityEventHandler<Entity, Command>;
+  }>): (command: Command) => void;
 
-export function useEntity<Entity extends WithID>(
-  useEffect: (anon: () => void, dependencyArray: any[]) => void,
-  entity$: Observable<[Entity, MEvent<unknown>]>,
-  subscription?: ([entity, event]: [Entity, MEvent<unknown>]) => void
-) {
-  useEffect(() => {
-    const sub = entity$
-      .subscribe(subscription);
-    return () => {
-      sub.unsubscribe();
-    };
-  }, [entity$, subscription]);
-}
+  // Overload WithID does not require a handler
+  function commandFactory<Command extends WithID = Entity>({
+    op,
+    eventType,
+    eventHandler,
+    asyncEventHandler,
+  }: {
+    op: StoreOperation.set | StoreOperation.mutate | StoreOperation.delete;
+    eventType: string;
+    asyncEventHandler?: AsyncEntityEventHandler<Entity, Command>;
+    eventHandler?: EntityEventHandler<Entity, Command>;
+  }): (command: Command) => void;
+  
+  // Implementation
+  function commandFactory<Command extends WithID | void = Entity>({
+    op = StoreOperation.set,
+    eventType,
+    eventHandler,
+    asyncEventHandler,
+  }: {
+    op: StoreOperation;
+    eventType: string;
+    asyncEventHandler?: AsyncEntityEventHandler<Entity, Command>;
+    eventHandler?: EntityEventHandler<Entity, Command>;
+  }): (command: Command) => void {
+    function commandFunction(command: Command) {
+      (command$ as Subject<any>).next({
+        payload: command,
+        op,
+        eventType,
+        eventHandler,
+        asyncEventHandler,
+      });
+    }
 
-export function hydrateCommandFactory<Entity extends WithID, Command = Entity>(
-  command$: Subject<CommandSubject<Entity, Command>>,
-  eventType: string
-): (command: Command) => void {
-  function commandFunction(command: Command) {
-    command$.next({
-      payload: command,
-      cud: CUD.create,
-      eventType,
-    });
+    return commandFunction;
   }
 
-  return commandFunction;
-}
-
-export function deleteCommandFactory<Entity extends WithID, Command = Entity>(
-  command$: Subject<CommandSubject<Entity, Command>>,
-  eventType: string
-): (command: Command) => void {
-  function commandFunction(command: Command) {
-    command$.next({
-      payload: command,
-      cud: CUD.delete,
-      eventType,
-    });
+  function useEntity(
+    useEffect: (anon: () => void, dependencyArray: any[]) => void,
+    subscription?: ([entity, event]: [Entity, MEvent<unknown>]) => void
+  ) {
+    useEffect(() => {
+      const sub = entity$.subscribe(subscription);
+      return () => {
+        sub.unsubscribe();
+      };
+    }, [entity$, subscription]);
   }
 
-  return commandFunction;
-}
-
-export type AtLeastOne<T, U = { [K in keyof T]: Pick<T, K> }> = Partial<T> & U[keyof U];
-
-// Overload for CUD.create (ID is unnecessary)
-export function commandFactory<Entity extends WithID, Command extends object | void = Entity>({
-  command$,
-  cud,
-  eventType,
-  eventHandler,
-  asyncEventHandler,
-}: {
-  command$: Subject<CommandSubject<Entity, Command>>;
-  cud?: CUD.create;
-  eventType: string;
-} & AtLeastOne<{
-  asyncEventHandler: AsyncEntityEventHandler<Entity, Command>;
-  eventHandler: EntityEventHandler<Entity, Command>;
-}>): (command: Command) => void;
-
-// Overload for other CUD types (ID is necessary)
-export function commandFactory<Entity extends WithID, Command extends WithID = Entity>({
-  command$,
-  cud,
-  eventType,
-  eventHandler,
-  asyncEventHandler,
-}: {
-  command$: Subject<CommandSubject<Entity, Command>>;
-  cud: CUD.update | CUD.delete;
-  eventType: string;
-} & AtLeastOne<{
-  asyncEventHandler: AsyncEntityEventHandler<Entity, Command>;
-  eventHandler: EntityEventHandler<Entity, Command>;
-}>): (command: Command) => void;
-
-export function commandFactory<Entity extends WithID, Command extends WithID | void = Entity>({
-  command$,
-  cud = CUD.create,
-  eventType,
-  eventHandler,
-  asyncEventHandler,
-}: {
-  command$: Subject<CommandSubject<Entity, Command>>;
-  cud?: CUD;
-  eventType: string;
-} & AtLeastOne<{
-  asyncEventHandler: AsyncEntityEventHandler<Entity, Command>;
-  eventHandler: EntityEventHandler<Entity, Command>;
-}>): (command: Command) => void {
-  function commandFunction(command: Command) {
-    command$.next({
-      payload: command,
-      cud,
-      eventType,
-      eventHandler,
-      asyncEventHandler,
-    });
-  }
-
-  return commandFunction;
+  return {
+    entity$,
+    command$,
+    commandFactory,
+    useEntity,
+    subscribe: () => entity$.subscribe()
+  };
 }
 
 export function definedEntity<Entity extends WithID>(entity: Entity | undefined) {
