@@ -1,9 +1,9 @@
 import { type ObservableMap } from 'mobx';
 import { type Observable } from 'rxjs';
 export declare enum StoreOperation {
-    set = "set",
     delete = "delete",
-    mutate = "mutate"
+    mutate = "mutate",
+    set = "set"
 }
 export declare enum MEventStatus {
     Complete = "complete",
@@ -14,18 +14,18 @@ export type WithID = {
     id: string;
 };
 export type MEvent<Command> = {
-    op: StoreOperation;
     entityInStore: boolean;
     entityName: string;
+    op: StoreOperation;
     payload: Command;
     status: MEventStatus;
     type: string;
 };
 export type CommandSubject<Entity extends WithID, Command> = {
     asyncEventHandler?: AsyncEntityEventHandler<Entity, Command>;
-    op: StoreOperation;
     eventHandler?: EntityEventHandler<Entity, Command>;
     eventType: string;
+    op: StoreOperation;
     payload: Command;
 };
 export type EntityEventHandler<Entity extends WithID, Command = Entity> = (entity: Entity | undefined, event: MEvent<Command>) => Entity;
@@ -40,17 +40,17 @@ export declare function stateMachineFactory<Entity extends WithID>(entityType: s
     command$: Observable<CommandSubject<Entity, WithID>>;
     commandFactory: {
         <Command extends void | object>({ op, eventType, eventHandler, asyncEventHandler, }: {
-            op: StoreOperation.set;
             eventType: string;
+            op: StoreOperation.set;
         } & AtLeastOne<{
             asyncEventHandler: AsyncEntityEventHandler<Entity, Command>;
             eventHandler: EntityEventHandler<Entity, Command>;
         }>): (command: Command) => void;
         <Command_1 extends WithID = Entity>({ op, eventType, eventHandler, asyncEventHandler, }: {
-            op: StoreOperation.set | StoreOperation.mutate | StoreOperation.delete;
-            eventType: string;
             asyncEventHandler?: AsyncEntityEventHandler<Entity, Command_1> | undefined;
             eventHandler?: EntityEventHandler<Entity, Command_1> | undefined;
+            eventType: string;
+            op: StoreOperation.set | StoreOperation.mutate | StoreOperation.delete;
         }): (command: Command_1) => void;
     };
     useEntity: (useEffect: (anon: () => void, dependencyArray: any[]) => void, subscription?: ([entity, event]: [Entity, MEvent<unknown>]) => void) => void;

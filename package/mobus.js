@@ -15,9 +15,9 @@ const mobx_1 = require("mobx");
 const rxjs_1 = require("rxjs");
 var StoreOperation;
 (function (StoreOperation) {
-    StoreOperation["set"] = "set";
     StoreOperation["delete"] = "delete";
     StoreOperation["mutate"] = "mutate";
+    StoreOperation["set"] = "set";
 })(StoreOperation || (exports.StoreOperation = StoreOperation = {}));
 var MEventStatus;
 (function (MEventStatus) {
@@ -153,7 +153,7 @@ function stateMachineFactory(entityType, store, { parallel = false } = {}) {
         command$,
         commandFactory,
         useEntity,
-        subscribe: () => entity$.subscribe()
+        subscribe: () => entity$.subscribe(),
     };
 }
 exports.stateMachineFactory = stateMachineFactory;

@@ -3,9 +3,9 @@ import { runInAction, type ObservableMap } from 'mobx';
 import { Subject, concatMap, mergeMap, share, type Observable } from 'rxjs';
 
 export enum StoreOperation {
-  set = 'set',
   delete = 'delete',
   mutate = 'mutate',
+  set = 'set',
 }
 
 export enum MEventStatus {
@@ -19,9 +19,9 @@ export type WithID = {
 };
 
 export type MEvent<Command> = {
-  op: StoreOperation;
   entityInStore: boolean;
   entityName: string;
+  op: StoreOperation;
   payload: Command;
   status: MEventStatus;
   type: string;
@@ -29,9 +29,9 @@ export type MEvent<Command> = {
 
 export type CommandSubject<Entity extends WithID, Command> = {
   asyncEventHandler?: AsyncEntityEventHandler<Entity, Command>;
-  op: StoreOperation;
   eventHandler?: EntityEventHandler<Entity, Command>;
   eventType: string;
+  op: StoreOperation;
   payload: Command;
 };
 
@@ -158,8 +158,8 @@ export function stateMachineFactory<Entity extends WithID>(
     eventHandler,
     asyncEventHandler,
   }: {
-    op: StoreOperation.set;
     eventType: string;
+    op: StoreOperation.set;
   } & AtLeastOne<{
     asyncEventHandler: AsyncEntityEventHandler<Entity, Command>;
     eventHandler: EntityEventHandler<Entity, Command>;
@@ -172,12 +172,12 @@ export function stateMachineFactory<Entity extends WithID>(
     eventHandler,
     asyncEventHandler,
   }: {
-    op: StoreOperation.set | StoreOperation.mutate | StoreOperation.delete;
-    eventType: string;
     asyncEventHandler?: AsyncEntityEventHandler<Entity, Command>;
     eventHandler?: EntityEventHandler<Entity, Command>;
+    eventType: string;
+    op: StoreOperation.set | StoreOperation.mutate | StoreOperation.delete;
   }): (command: Command) => void;
-  
+
   // Implementation
   function commandFactory<Command extends WithID | void = Entity>({
     op = StoreOperation.set,
@@ -185,10 +185,10 @@ export function stateMachineFactory<Entity extends WithID>(
     eventHandler,
     asyncEventHandler,
   }: {
-    op: StoreOperation;
-    eventType: string;
     asyncEventHandler?: AsyncEntityEventHandler<Entity, Command>;
     eventHandler?: EntityEventHandler<Entity, Command>;
+    eventType: string;
+    op: StoreOperation;
   }): (command: Command) => void {
     function commandFunction(command: Command) {
       (command$ as Subject<any>).next({
@@ -220,7 +220,7 @@ export function stateMachineFactory<Entity extends WithID>(
     command$,
     commandFactory,
     useEntity,
-    subscribe: () => entity$.subscribe()
+    subscribe: () => entity$.subscribe(),
   };
 }
 
