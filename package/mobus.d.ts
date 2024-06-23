@@ -1,5 +1,5 @@
 import { type ObservableMap } from 'mobx';
-import { type Observable } from 'rxjs';
+import { Observable } from 'rxjs';
 export declare enum StoreOperation {
     delete = "delete",
     mutate = "mutate",
@@ -19,6 +19,7 @@ export type MEvent<Command> = {
     op: StoreOperation;
     payload: Command;
     status: MEventStatus;
+    supplemental?: any;
     type: string;
 };
 export type CommandSubject<Entity extends WithID, Command> = {
@@ -27,6 +28,7 @@ export type CommandSubject<Entity extends WithID, Command> = {
     eventType: string;
     op: StoreOperation;
     payload: Command;
+    resolve: (entity: Entity) => void;
 };
 export type EntityEventHandler<Entity extends WithID, Command = Entity> = (entity: Entity | undefined, event: MEvent<Command>) => Entity;
 export type AsyncEntityEventHandler<Entity extends WithID, Command = Entity> = (entity: Entity | undefined, event: MEvent<Command>) => Promise<Entity>;
@@ -45,16 +47,25 @@ export declare function stateMachineFactory<Entity extends WithID>(entityType: s
         } & AtLeastOne<{
             asyncEventHandler: AsyncEntityEventHandler<Entity, Command>;
             eventHandler: EntityEventHandler<Entity, Command>;
-        }>): (command: Command) => void;
+        }>): (command: Command) => Promise<Entity>;
         <Command_1 extends WithID = Entity>({ op, eventType, eventHandler, asyncEventHandler, }: {
             asyncEventHandler?: AsyncEntityEventHandler<Entity, Command_1> | undefined;
             eventHandler?: EntityEventHandler<Entity, Command_1> | undefined;
             eventType: string;
             op: StoreOperation.set | StoreOperation.mutate | StoreOperation.delete;
-        }): (command: Command_1) => void;
+        }): (command: Command_1) => Promise<Entity>;
     };
-    useEntity: (useEffect: (anon: () => void, dependencyArray: any[]) => void, subscription?: ([entity, event]: [Entity, MEvent<unknown>]) => void) => void;
     subscribe: () => import("rxjs").Subscription;
 };
 export declare function definedEntity<Entity extends WithID>(entity: Entity | undefined): Entity;
+export type AggregateEventHandler<Aggregate, Entity> = (aggregate: Aggregate, entity: Entity, event: MEvent<any>) => void;
+export declare function aggregateFactory<Aggregate>(store: Aggregate): {
+    handleEntity: <Entity, Events extends string>({ entity$, eventHandlers, }: {
+        entity$: Observable<[Entity, MEvent<unknown>]>;
+        eventHandlers: { [key in Events]?: AggregateEventHandler<Aggregate, Entity> | undefined; };
+    }) => void;
+    aggregate$: Observable<Aggregate>;
+    subscribe: () => import("rxjs").Subscription;
+};
+export declare function effectFactory(useEffect: (anon: () => void, dependencyArray: unknown[]) => void): <Entity>(entity$: Observable<Entity>, subscription?: (entity: Entity) => void) => void;
 //# sourceMappingURL=mobus.d.ts.map

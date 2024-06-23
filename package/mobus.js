@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.definedEntity = exports.stateMachineFactory = exports.MEventStatus = exports.StoreOperation = void 0;
+exports.effectFactory = exports.aggregateFactory = exports.definedEntity = exports.stateMachineFactory = exports.MEventStatus = exports.StoreOperation = void 0;
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 const mobx_1 = require("mobx");
 const rxjs_1 = require("rxjs");
@@ -121,38 +121,36 @@ function stateMachineFactory(entityType, store, { parallel = false } = {}) {
             }
         }
         if (!command.eventHandler && !command.asyncEventHandler && command.payload.id) {
+            entityResult = command.payload;
             (0, mobx_1.runInAction)(() => {
                 store.set(command.payload.id, command.payload);
             });
         }
+        command.resolve(entityResult);
         return [entityResult, event];
     })), (0, rxjs_1.share)());
     // Implementation
     function commandFactory({ op = StoreOperation.set, eventType, eventHandler, asyncEventHandler, }) {
-        function commandFunction(command) {
+        return function commandFunction(command) {
+            let resolve;
+            const promise = new Promise((r) => {
+                resolve = r;
+            });
             command$.next({
                 payload: command,
                 op,
                 eventType,
                 eventHandler,
                 asyncEventHandler,
+                resolve,
             });
-        }
-        return commandFunction;
-    }
-    function useEntity(useEffect, subscription) {
-        useEffect(() => {
-            const sub = entity$.subscribe(subscription);
-            return () => {
-                sub.unsubscribe();
-            };
-        }, [entity$, subscription]);
+            return promise;
+        };
     }
     return {
         entity$,
         command$,
         commandFactory,
-        useEntity,
         subscribe: () => entity$.subscribe(),
     };
 }
@@ -164,4 +162,34 @@ function definedEntity(entity) {
     return entity;
 }
 exports.definedEntity = definedEntity;
+function aggregateFactory(store) {
+    const aggregateInstance$$ = new rxjs_1.Subject();
+    const handledEntities$ = [];
+    function handleEntity({ entity$, eventHandlers, }) {
+        const entityHandler$ = entity$.pipe((0, rxjs_1.filter)(([_entity, event]) => !!eventHandlers[event.type]), (0, rxjs_1.map)(([entity, event]) => {
+            (0, mobx_1.runInAction)(() => eventHandlers[event.type](store, entity, event));
+            return store;
+        }));
+        handledEntities$.push(entityHandler$);
+        aggregateInstance$$.next((0, rxjs_1.merge)(...handledEntities$).pipe((0, rxjs_1.share)()));
+    }
+    const aggregate$ = aggregateInstance$$.pipe((0, rxjs_1.switchMap)((i) => i));
+    return {
+        handleEntity,
+        aggregate$,
+        subscribe: () => aggregate$.subscribe(),
+    };
+}
+exports.aggregateFactory = aggregateFactory;
+function effectFactory(useEffect) {
+    return function useObservable(entity$, subscription) {
+        useEffect(() => {
+            const sub = entity$.subscribe(subscription);
+            return () => {
+                sub.unsubscribe();
+            };
+        }, [entity$, subscription]);
+    };
+}
+exports.effectFactory = effectFactory;
 //# sourceMappingURL=mobus.js.map
