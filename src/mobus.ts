@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { runInAction, type ObservableMap } from 'mobx';
-import { Subject, concatMap, mergeMap, share, type Observable } from 'rxjs';
+import { Observable, Subject, concatMap, filter, map, merge, mergeMap, share, switchMap } from 'rxjs';
 
 export enum StoreOperation {
   delete = 'delete',
@@ -24,6 +24,8 @@ export type MEvent<Command> = {
   op: StoreOperation;
   payload: Command;
   status: MEventStatus;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supplemental?: any;
   type: string;
 };
 
@@ -33,6 +35,7 @@ export type CommandSubject<Entity extends WithID, Command> = {
   eventType: string;
   op: StoreOperation;
   payload: Command;
+  resolve: (entity: Entity) => void;
 };
 
 export type EntityEventHandler<Entity extends WithID, Command = Entity> = (
@@ -142,15 +145,17 @@ export function stateMachineFactory<Entity extends WithID>(
       }
 
       if (!command.eventHandler && !command.asyncEventHandler && command.payload.id) {
+        entityResult = command.payload as Entity;
         runInAction(() => {
           store.set(command.payload.id, command.payload as Entity);
         });
       }
-
+      command.resolve(entityResult as Entity);
       return [entityResult, event] as [Entity, MEvent<WithID>];
     }),
     share()
   );
+
   // Overload No ID requires a handler
   function commandFactory<Command extends object | void>({
     op,
@@ -163,7 +168,7 @@ export function stateMachineFactory<Entity extends WithID>(
   } & AtLeastOne<{
     asyncEventHandler: AsyncEntityEventHandler<Entity, Command>;
     eventHandler: EntityEventHandler<Entity, Command>;
-  }>): (command: Command) => void;
+  }>): (command: Command) => Promise<Entity>;
 
   // Overload WithID does not require a handler
   function commandFactory<Command extends WithID = Entity>({
@@ -176,7 +181,7 @@ export function stateMachineFactory<Entity extends WithID>(
     eventHandler?: EntityEventHandler<Entity, Command>;
     eventType: string;
     op: StoreOperation.set | StoreOperation.mutate | StoreOperation.delete;
-  }): (command: Command) => void;
+  }): (command: Command) => Promise<Entity>;
 
   // Implementation
   function commandFactory<Command extends WithID | void = Entity>({
@@ -189,37 +194,28 @@ export function stateMachineFactory<Entity extends WithID>(
     eventHandler?: EntityEventHandler<Entity, Command>;
     eventType: string;
     op: StoreOperation;
-  }): (command: Command) => void {
-    function commandFunction(command: Command) {
-      (command$ as Subject<any>).next({
+  }): (command: Command) => Promise<Entity> {
+    return function commandFunction(command: Command) {
+      let resolve;
+      const promise = new Promise<Entity>((r) => {
+        resolve = r;
+      });
+      (command$ as Subject<unknown>).next({
         payload: command,
         op,
         eventType,
         eventHandler,
         asyncEventHandler,
+        resolve,
       });
-    }
-
-    return commandFunction;
-  }
-
-  function useEntity(
-    useEffect: (anon: () => void, dependencyArray: any[]) => void,
-    subscription?: ([entity, event]: [Entity, MEvent<unknown>]) => void
-  ) {
-    useEffect(() => {
-      const sub = entity$.subscribe(subscription);
-      return () => {
-        sub.unsubscribe();
-      };
-    }, [entity$, subscription]);
+      return promise;
+    };
   }
 
   return {
     entity$,
     command$,
     commandFactory,
-    useEntity,
     subscribe: () => entity$.subscribe(),
   };
 }
@@ -229,4 +225,65 @@ export function definedEntity<Entity extends WithID>(entity: Entity | undefined)
     throw new Error('Entity does not exist');
   }
   return entity;
+}
+
+export type AggregateEventHandler<Aggregate, Entity> = (
+  aggregate: Aggregate,
+  entity: Entity,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  event: MEvent<any>
+) => void;
+
+export function aggregateFactory<Aggregate>(store: Aggregate) {
+  const aggregateInstance$$ = new Subject<Observable<Aggregate>>();
+  const handledEntities$: Observable<Aggregate>[] = [];
+
+  function handleEntity<Entity, Events extends string>({
+    entity$,
+    eventHandlers,
+  }: {
+    entity$: Observable<[Entity, MEvent<unknown>]>;
+    eventHandlers: {
+      [key in Events]?: AggregateEventHandler<Aggregate, Entity>;
+    };
+  }) {
+    const entityHandler$: Observable<Aggregate> = entity$.pipe(
+      filter(
+        ([_entity, event]) =>
+          !!(eventHandlers as { [key: string]: AggregateEventHandler<Aggregate, Entity> })[event.type]
+      ),
+      map(([entity, event]) => {
+        runInAction(() =>
+          (eventHandlers as { [key: string]: AggregateEventHandler<Aggregate, Entity> })[event.type](
+            store,
+            entity,
+            event
+          )
+        );
+        return store;
+      })
+    );
+    handledEntities$.push(entityHandler$);
+
+    aggregateInstance$$.next(merge(...handledEntities$).pipe(share()));
+  }
+
+  const aggregate$ = aggregateInstance$$.pipe(switchMap((i) => i));
+
+  return {
+    handleEntity,
+    aggregate$,
+    subscribe: () => aggregate$.subscribe(),
+  };
+}
+
+export function effectFactory(useEffect: (anon: () => void, dependencyArray: unknown[]) => void) {
+  return function useObservable<Entity>(entity$: Observable<Entity>, subscription?: (entity: Entity) => void) {
+    useEffect(() => {
+      const sub = entity$.subscribe(subscription);
+      return () => {
+        sub.unsubscribe();
+      };
+    }, [entity$, subscription]);
+  };
 }

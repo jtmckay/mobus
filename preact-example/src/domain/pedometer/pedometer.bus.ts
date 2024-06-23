@@ -6,6 +6,7 @@ import {
   StoreOperation,
   WithID,
   definedEntity,
+  effectFactory,
   stateMachineFactory,
 } from '../../../../src/mobus';
 import { ENTITY, EVENT } from './pedometer.constants';
@@ -13,12 +14,12 @@ import { Pedometer, pedometerStore } from './pedometer.store';
 
 export const {
   commandFactory,
+  entity$,
   subscribe,
-  useEntity
 } = stateMachineFactory(ENTITY, pedometerStore, { parallel: true });
 
 export function usePedometerService(subscription?: ([estimate]: [Pedometer, MEvent<unknown>]) => void) {
-  useEntity(useEffect, subscription);
+  effectFactory(useEffect)(entity$, subscription);
 }
 
 // Start the engine immediately. More advanced: subscribe as needed
@@ -38,7 +39,7 @@ export const create = commandFactory<void>({
 const step = commandFactory<WithID>({
   op: StoreOperation.mutate,
   eventType: EVENT.TrackStep,
-  eventHandler: (entity, event) => {
+  eventHandler: (entity) => {
     const pedometer = definedEntity(entity);
     pedometer.stepCount++;
     return pedometer;
