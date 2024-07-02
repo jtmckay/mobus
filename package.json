@@ -28,7 +28,6 @@
   },
   "homepage": "https://github.com/jtmckay/mobus#readme",
   "dependencies": {
-    "mobx": "^6",
     "rxjs": "^7",
     "typescript": "^5.4.5"
   }

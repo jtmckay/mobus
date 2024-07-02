@@ -1,7 +1,7 @@
 {
   "name": "mobus",
-  "version": "1.3.0",
-  "description": "RxJS events into a MobX state machine",
+  "version": "1.4.0",
+  "description": "Turn state into an RxJS state machine",
   "main": "mobus.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

@@ -1,8 +1,9 @@
-import preactLogo from '../../assets/preact.svg';
-import './style.css';
-import { pedometerStore } from '../../domain/pedometer/pedometer.store';
-import { pedometerCommand } from '../../domain/pedometer/pedometer.bus';
 import { observer } from 'mobx-react-lite';
+import preactLogo from '../../assets/preact.svg';
+import { counterStore, increment } from '../../domain/counter/counter.bus';
+import { create, step, syncHeartRate } from '../../domain/pedometer/pedometer.bus';
+import { pedometerStore } from '../../domain/pedometer/pedometer.store';
+import './style.css';
 
 const TableContents = observer(() => {
 	return (<>
@@ -11,7 +12,7 @@ const TableContents = observer(() => {
 				<tr>
 					<td>{i.id}</td>
 					<td>{i.stepCount}</td>
-					<td><div style={{ cursor: 'pointer' }} onClick={() => pedometerCommand.step({ id: i.id })}>Increment</div></td>
+					<td><div style={{ cursor: 'pointer' }} onClick={() => step({ id: i.id })}>Increment</div></td>
 				</tr>
 			)
 		})}
@@ -25,12 +26,18 @@ const SideThing = observer(() => {
 				<tr>
 					<td>{i.id}</td>
 					<td>{i.heartRate}</td>
-					<td><div style={{ cursor: 'pointer' }} onClick={() => pedometerCommand.syncHeartRate({ id: i.id, rate: Math.round(Math.random() * 100 + 80) })}>Sync</div></td>
+					<td><div style={{ cursor: 'pointer' }} onClick={() => syncHeartRate({ id: i.id, rate: Math.round(Math.random() * 100 + 80) })}>Sync</div></td>
 				</tr>
 			)
 		})}
 	</>)
 })
+
+const Counter = observer(() => (
+  <div onClick={() => increment()}>
+			Counter: {counterStore.count}
+	</div>
+));
 
 export function Home() {
 	return (
@@ -39,8 +46,9 @@ export function Home() {
 				<img src={preactLogo} alt="Preact logo" height="160" width="160" />
 			</a>
 			<h1>Get Started building Vite-powered Preact Apps</h1>
-			<h2>With Mobus</h2>
+			<h2>With Mo'Bus</h2>
 			<h3>@tanstack/react-query | MobX | RxJS</h3>
+			<Counter />
 			<div>
 				<table>
 					<tbody>
@@ -63,9 +71,8 @@ export function Home() {
 					</tbody>
 				</table>
 				<div style={{ cursor: 'pointer' }} onClick={() => {
-					console.log('create pedometer')
-					pedometerCommand.create()
-				}}>Add counter</div>
+					create()
+				}}>Add pedometer</div>
 			</div>
 		</div>
 	);

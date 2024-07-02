@@ -11,7 +11,6 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.effectFactory = exports.aggregateFactory = exports.definedEntity = exports.stateMachineFactory = exports.MEventStatus = exports.StoreOperation = void 0;
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-const mobx_1 = require("mobx");
 const rxjs_1 = require("rxjs");
 var StoreOperation;
 (function (StoreOperation) {
@@ -25,24 +24,39 @@ var MEventStatus;
     MEventStatus["Error"] = "error";
     MEventStatus["Pending"] = "pending";
 })(MEventStatus || (exports.MEventStatus = MEventStatus = {}));
-function stateMachineFactory(entityType, store, { parallel = false } = {}) {
+function getEntity(store, command, isSingleStore) {
+    const entity = isSingleStore ? store.get('') : command.payload ? store.get(command.payload.id) : undefined;
+    const originalEntity = entity ? Object.assign({}, entity) : undefined;
+    return { originalEntity, entity };
+}
+function singleToMap(singleStore) {
+    const store = {
+        _state: singleStore
+    };
+    return {
+        get: () => store._state,
+        set: (_, state) => store._state = state,
+        delete: () => { throw new Error('Cannot delete in singleStore'); }
+    };
+}
+function stateMachineFactory(entityName, { store, storeSingle, parallel = false, wrapper = (callback) => callback(), }) {
     const command$ = new rxjs_1.Subject();
+    const storeAsMap = store ? store : singleToMap(storeSingle);
     const entity$ = command$.pipe(
     // eslint-disable-next-line complexity
     (parallel ? rxjs_1.mergeMap : rxjs_1.concatMap)((command) => __awaiter(this, void 0, void 0, function* () {
         const event = {
             op: command.op,
             entityInStore: false,
-            entityName: entityType,
+            entityName,
             payload: command.payload,
             status: MEventStatus.Complete,
             type: command.eventType,
         };
-        const entity = command.payload ? store.get(command.payload.id) : undefined;
-        if (entity) {
+        const { originalEntity, entity } = getEntity(storeAsMap, command, !!storeSingle);
+        if (originalEntity) {
             event.entityInStore = true;
         }
-        const originalEntity = entity ? Object.assign({}, entity) : undefined;
         let entityResult = entity;
         if (command.asyncEventHandler) {
             event.status = MEventStatus.Pending;
@@ -51,20 +65,20 @@ function stateMachineFactory(entityType, store, { parallel = false } = {}) {
             try {
                 if (command.op === StoreOperation.set) {
                     entityResult = command.eventHandler(entity, event);
-                    (0, mobx_1.runInAction)(() => {
-                        store.set(entityResult.id, entityResult);
+                    wrapper(() => {
+                        storeAsMap.set(entityResult.id, entityResult);
                     });
                 }
                 else if (command.op === StoreOperation.delete) {
-                    (0, mobx_1.runInAction)(() => {
-                        store.delete(entityResult.id);
+                    wrapper(() => {
+                        storeAsMap.delete(entityResult.id);
                     });
                 }
                 else {
-                    (0, mobx_1.runInAction)(() => {
+                    wrapper(() => {
                         entityResult = command.eventHandler(entity, event);
                         if (!entity) {
-                            store.set(entityResult.id, entityResult);
+                            storeAsMap.set(entityResult.id, entityResult);
                         }
                     });
                 }
@@ -72,13 +86,13 @@ function stateMachineFactory(entityType, store, { parallel = false } = {}) {
             catch (err) {
                 event.status = MEventStatus.Error;
                 if (!originalEntity && entityResult) {
-                    (0, mobx_1.runInAction)(() => {
-                        store.delete(entityResult.id);
+                    wrapper(() => {
+                        storeAsMap.delete(entityResult.id);
                     });
                 }
                 else if (originalEntity) {
-                    (0, mobx_1.runInAction)(() => {
-                        store.set(originalEntity.id, originalEntity);
+                    wrapper(() => {
+                        storeAsMap.set(originalEntity.id, originalEntity);
                     });
                 }
             }
@@ -88,20 +102,20 @@ function stateMachineFactory(entityType, store, { parallel = false } = {}) {
             try {
                 if (command.op === StoreOperation.set) {
                     entityResult = yield command.asyncEventHandler(entity, event);
-                    (0, mobx_1.runInAction)(() => {
-                        store.set(entityResult.id, entityResult);
+                    wrapper(() => {
+                        storeAsMap.set(entityResult.id, entityResult);
                     });
                 }
                 else if (command.op === StoreOperation.delete) {
-                    (0, mobx_1.runInAction)(() => {
-                        store.delete(entityResult.id);
+                    wrapper(() => {
+                        storeAsMap.delete(entityResult.id);
                     });
                 }
                 else {
-                    yield (0, mobx_1.runInAction)(() => __awaiter(this, void 0, void 0, function* () {
+                    yield wrapper(() => __awaiter(this, void 0, void 0, function* () {
                         entityResult = yield command.asyncEventHandler(entity, event);
                         if (!entity) {
-                            store.set(entityResult.id, entityResult);
+                            storeAsMap.set(entityResult.id, entityResult);
                         }
                     }));
                 }
@@ -109,28 +123,28 @@ function stateMachineFactory(entityType, store, { parallel = false } = {}) {
             catch (err) {
                 event.status = MEventStatus.Error;
                 if (!originalEntity && entityResult) {
-                    (0, mobx_1.runInAction)(() => {
-                        store.delete(entityResult.id);
+                    wrapper(() => {
+                        storeAsMap.delete(entityResult.id);
                     });
                 }
                 else if (originalEntity) {
-                    (0, mobx_1.runInAction)(() => {
-                        store.set(originalEntity.id, originalEntity);
+                    wrapper(() => {
+                        storeAsMap.set(originalEntity.id, originalEntity);
                     });
                 }
             }
         }
         if (!command.eventHandler && !command.asyncEventHandler && command.payload.id) {
             entityResult = command.payload;
-            (0, mobx_1.runInAction)(() => {
-                store.set(command.payload.id, command.payload);
+            wrapper(() => {
+                storeAsMap.set(command.payload.id, command.payload);
             });
         }
         command.resolve(entityResult);
         return [entityResult, event];
     })), (0, rxjs_1.share)());
     // Implementation
-    function commandFactory({ op = StoreOperation.set, eventType, eventHandler, asyncEventHandler, }) {
+    function commandFactory({ op = StoreOperation.mutate, eventType, eventHandler, asyncEventHandler, }) {
         return function commandFunction(command) {
             let resolve;
             const promise = new Promise((r) => {
@@ -162,13 +176,13 @@ function definedEntity(entity) {
     return entity;
 }
 exports.definedEntity = definedEntity;
-function aggregateFactory(store) {
+function aggregateFactory(aggregateName, store, { wrapper = (callback) => callback(), } = {}) {
     const aggregateInstance$$ = new rxjs_1.Subject();
     const handledEntities$ = [];
     function handleEntity({ entity$, eventHandlers, }) {
         const entityHandler$ = entity$.pipe((0, rxjs_1.filter)(([_entity, event]) => !!eventHandlers[event.type]), (0, rxjs_1.map)(([entity, event]) => {
-            (0, mobx_1.runInAction)(() => eventHandlers[event.type](store, entity, event));
-            return store;
+            wrapper(() => eventHandlers[event.type](store, entity, event));
+            return [store, { aggregateName, event }];
         }));
         handledEntities$.push(entityHandler$);
         aggregateInstance$$.next((0, rxjs_1.merge)(...handledEntities$).pipe((0, rxjs_1.share)()));

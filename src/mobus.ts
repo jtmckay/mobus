@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
-import { runInAction, type ObservableMap } from 'mobx';
 import { Observable, Subject, concatMap, filter, map, merge, mergeMap, share, switchMap } from 'rxjs';
 
 export enum StoreOperation {
@@ -24,7 +22,6 @@ export type MEvent<Command> = {
   op: StoreOperation;
   payload: Command;
   status: MEventStatus;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supplemental?: any;
   type: string;
 };
@@ -50,28 +47,62 @@ export type AsyncEntityEventHandler<Entity extends WithID, Command = Entity> = (
 
 export type AtLeastOne<T, U = { [K in keyof T]: Pick<T, K> }> = Partial<T> & U[keyof U];
 
-export function stateMachineFactory<Entity extends WithID>(
-  entityType: string,
-  store: ObservableMap<string, Entity>,
-  { parallel = false } = {}
+function getEntity<Entity>(
+  store: Map<string, Entity>,
+  command: CommandSubject<Entity & WithID, WithID>,
+  isSingleStore: boolean
 ) {
+  const entity = isSingleStore ? store.get('') : command.payload ? store.get(command.payload.id) : undefined;
+  const originalEntity = entity ? { ...entity } : undefined;
+  return { originalEntity, entity } as {
+    entity: (Entity & WithID) | undefined;
+    originalEntity: (Entity & WithID) | undefined;
+  };
+}
+
+function singleToMap<Entity>(singleStore: Entity) {
+  const store = {
+    _state: singleStore,
+  };
+
+  return {
+    get: () => store._state,
+    set: (_: string, state: Entity) => (store._state = state),
+    delete: () => {
+      throw new Error('Cannot delete in singleStore');
+    },
+  };
+}
+
+export function stateMachineFactory<EntityNoID>(
+  entityName: string,
+  {
+    store,
+    storeSingle,
+    parallel = false,
+    wrapper = (callback) => callback(),
+  }: { parallel?: boolean; wrapper?: (callback: () => void) => void } & AtLeastOne<{
+    store: Map<string, EntityNoID & WithID>;
+    storeSingle: EntityNoID;
+  }>
+) {
+  type Entity = EntityNoID & WithID;
   const command$ = new Subject() as Observable<CommandSubject<Entity, WithID>>;
+  const storeAsMap = store || (singleToMap(storeSingle!) as unknown as Map<string, Entity>);
   const entity$ = command$.pipe(
-    // eslint-disable-next-line complexity
     (parallel ? mergeMap : concatMap)(async (command: CommandSubject<Entity, WithID>) => {
       const event: MEvent<WithID> = {
         op: command.op,
         entityInStore: false,
-        entityName: entityType,
+        entityName,
         payload: command.payload,
         status: MEventStatus.Complete,
         type: command.eventType,
       };
-      const entity = command.payload ? store.get(command.payload.id) : undefined;
-      if (entity) {
+      const { originalEntity, entity } = getEntity<EntityNoID>(storeAsMap, command, !!storeSingle);
+      if (originalEntity) {
         event.entityInStore = true;
       }
-      const originalEntity = entity ? { ...entity } : undefined;
       let entityResult = entity;
 
       if (command.asyncEventHandler) {
@@ -81,30 +112,30 @@ export function stateMachineFactory<Entity extends WithID>(
         try {
           if (command.op === StoreOperation.set) {
             entityResult = command.eventHandler(entity, event);
-            runInAction(() => {
-              store.set(entityResult!.id, entityResult!);
+            wrapper(() => {
+              storeAsMap.set(entityResult!.id, entityResult!);
             });
           } else if (command.op === StoreOperation.delete) {
-            runInAction(() => {
-              store.delete(entityResult!.id);
+            wrapper(() => {
+              storeAsMap.delete(entityResult!.id);
             });
           } else {
-            runInAction(() => {
+            wrapper(() => {
               entityResult = command.eventHandler!(entity, event);
               if (!entity) {
-                store.set(entityResult.id, entityResult);
+                storeAsMap.set(entityResult.id, entityResult);
               }
             });
           }
         } catch (err) {
           event.status = MEventStatus.Error;
           if (!originalEntity && entityResult) {
-            runInAction(() => {
-              store.delete(entityResult!.id);
+            wrapper(() => {
+              storeAsMap.delete(entityResult!.id);
             });
           } else if (originalEntity) {
-            runInAction(() => {
-              store.set(originalEntity.id, originalEntity);
+            wrapper(() => {
+              storeAsMap.set(originalEntity.id, originalEntity);
             });
           }
         }
@@ -115,30 +146,30 @@ export function stateMachineFactory<Entity extends WithID>(
         try {
           if (command.op === StoreOperation.set) {
             entityResult = await command.asyncEventHandler(entity, event);
-            runInAction(() => {
-              store.set(entityResult!.id, entityResult!);
+            wrapper(() => {
+              storeAsMap.set(entityResult!.id, entityResult!);
             });
           } else if (command.op === StoreOperation.delete) {
-            runInAction(() => {
-              store.delete(entityResult!.id);
+            wrapper(() => {
+              storeAsMap.delete(entityResult!.id);
             });
           } else {
-            await runInAction(async () => {
+            await wrapper(async () => {
               entityResult = await command.asyncEventHandler!(entity, event);
               if (!entity) {
-                store.set(entityResult!.id, entityResult);
+                storeAsMap.set(entityResult!.id, entityResult);
               }
             });
           }
         } catch (err) {
           event.status = MEventStatus.Error;
           if (!originalEntity && entityResult) {
-            runInAction(() => {
-              store.delete(entityResult!.id);
+            wrapper(() => {
+              storeAsMap.delete(entityResult!.id);
             });
           } else if (originalEntity) {
-            runInAction(() => {
-              store.set(originalEntity.id, originalEntity);
+            wrapper(() => {
+              storeAsMap.set(originalEntity.id, originalEntity);
             });
           }
         }
@@ -146,8 +177,8 @@ export function stateMachineFactory<Entity extends WithID>(
 
       if (!command.eventHandler && !command.asyncEventHandler && command.payload.id) {
         entityResult = command.payload as Entity;
-        runInAction(() => {
-          store.set(command.payload.id, command.payload as Entity);
+        wrapper(() => {
+          storeAsMap.set(command.payload.id, command.payload as Entity);
         });
       }
       command.resolve(entityResult as Entity);
@@ -163,8 +194,8 @@ export function stateMachineFactory<Entity extends WithID>(
     eventHandler,
     asyncEventHandler,
   }: {
-    eventType: string;
-    op: StoreOperation.set;
+    eventType?: string;
+    op?: StoreOperation.set;
   } & AtLeastOne<{
     asyncEventHandler: AsyncEntityEventHandler<Entity, Command>;
     eventHandler: EntityEventHandler<Entity, Command>;
@@ -179,21 +210,21 @@ export function stateMachineFactory<Entity extends WithID>(
   }: {
     asyncEventHandler?: AsyncEntityEventHandler<Entity, Command>;
     eventHandler?: EntityEventHandler<Entity, Command>;
-    eventType: string;
-    op: StoreOperation.set | StoreOperation.mutate | StoreOperation.delete;
+    eventType?: string;
+    op?: StoreOperation;
   }): (command: Command) => Promise<Entity>;
 
   // Implementation
   function commandFactory<Command extends WithID | void = Entity>({
-    op = StoreOperation.set,
+    op = StoreOperation.mutate,
     eventType,
     eventHandler,
     asyncEventHandler,
   }: {
     asyncEventHandler?: AsyncEntityEventHandler<Entity, Command>;
     eventHandler?: EntityEventHandler<Entity, Command>;
-    eventType: string;
-    op: StoreOperation;
+    eventType?: string;
+    op?: StoreOperation;
   }): (command: Command) => Promise<Entity> {
     return function commandFunction(command: Command) {
       let resolve;
@@ -230,13 +261,21 @@ export function definedEntity<Entity extends WithID>(entity: Entity | undefined)
 export type AggregateEventHandler<Aggregate, Entity> = (
   aggregate: Aggregate,
   entity: Entity,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   event: MEvent<any>
 ) => void;
 
-export function aggregateFactory<Aggregate>(store: Aggregate) {
-  const aggregateInstance$$ = new Subject<Observable<Aggregate>>();
-  const handledEntities$: Observable<Aggregate>[] = [];
+export type MAggregateEvent<Command> = {
+  aggregateName: string;
+  event: MEvent<Command>;
+};
+
+export function aggregateFactory<Aggregate>(
+  aggregateName: string,
+  store: Aggregate,
+  { wrapper = (callback) => callback() }: { parallel?: boolean; wrapper?: (callback: () => void) => void } = {}
+) {
+  const aggregateInstance$$ = new Subject<Observable<[Aggregate, MAggregateEvent<WithID>]>>();
+  const handledEntities$: Observable<[Aggregate, MAggregateEvent<WithID>]>[] = [];
 
   function handleEntity<Entity, Events extends string>({
     entity$,
@@ -247,20 +286,20 @@ export function aggregateFactory<Aggregate>(store: Aggregate) {
       [key in Events]?: AggregateEventHandler<Aggregate, Entity>;
     };
   }) {
-    const entityHandler$: Observable<Aggregate> = entity$.pipe(
+    const entityHandler$: Observable<[Aggregate, MAggregateEvent<WithID>]> = entity$.pipe(
       filter(
         ([_entity, event]) =>
           !!(eventHandlers as { [key: string]: AggregateEventHandler<Aggregate, Entity> })[event.type]
       ),
       map(([entity, event]) => {
-        runInAction(() =>
+        wrapper(() =>
           (eventHandlers as { [key: string]: AggregateEventHandler<Aggregate, Entity> })[event.type](
             store,
             entity,
             event
           )
         );
-        return store;
+        return [store, { aggregateName, event }] as [Aggregate, MAggregateEvent<WithID>];
       })
     );
     handledEntities$.push(entityHandler$);

@@ -16,7 +16,7 @@ export const {
   commandFactory,
   entity$,
   subscribe,
-} = stateMachineFactory(ENTITY, pedometerStore, { parallel: true });
+} = stateMachineFactory(ENTITY, { wrapper: runInAction, store: pedometerStore });
 
 export function usePedometerService(subscription?: ([estimate]: [Pedometer, MEvent<unknown>]) => void) {
   effectFactory(useEffect)(entity$, subscription);
@@ -36,7 +36,7 @@ export const create = commandFactory<void>({
   },
 });
 
-const step = commandFactory<WithID>({
+export const step = commandFactory<WithID>({
   op: StoreOperation.mutate,
   eventType: EVENT.TrackStep,
   eventHandler: (entity) => {
@@ -46,7 +46,7 @@ const step = commandFactory<WithID>({
   },
 });
 
-const syncHeartRate = commandFactory<WithID & { rate: number }>({
+export const syncHeartRate = commandFactory<WithID & { rate: number }>({
   op: StoreOperation.mutate,
   eventType: EVENT.Rate,
   eventHandler: (entity, event) => {
@@ -65,17 +65,12 @@ const syncHeartRate = commandFactory<WithID & { rate: number }>({
   }
 });
 
-// Namespaced export
-export const pedometerCommand = {
-  create,
-  step,
-  syncHeartRate,
-  hydrate: commandFactory({
-    op: StoreOperation.set,
-    eventType: EVENT.Hydrate,
-  }),
-  delete: commandFactory<WithID>({
-    op: StoreOperation.delete,
-    eventType: EVENT.Hydrate,
-  }),
-};
+export const hydrate = commandFactory({
+  op: StoreOperation.set,
+  eventType: EVENT.Hydrate,
+})
+
+export const remove = commandFactory<WithID>({
+  op: StoreOperation.delete,
+  eventType: EVENT.Hydrate,
+})
