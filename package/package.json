@@ -1,6 +1,6 @@
 {
   "name": "mobus",
-  "version": "1.4.0",
+  "version": "1.4.2",
   "description": "Turn state into an RxJS state machine",
   "main": "mobus.js",
   "scripts": {
@@ -29,7 +29,6 @@
   },
   "homepage": "https://github.com/jtmckay/mobus#readme",
   "peerDependencies": {
-    "mobx": "^6",
     "rxjs": "^7"
   }
 }

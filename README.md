@@ -13,7 +13,7 @@ You are looking for:
 - how to leverage the power of RxJS (EGs in React with MobX)
 
 ## Example
-https://github.com/jtmckay/mobus/tree/main/preact-example
+https://github.com/jtmckay/mobus/tree/main/examples/preact
 
 ### Control state with commands
 ```ts

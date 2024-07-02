@@ -1,8 +1,8 @@
-import { observable, runInAction } from 'mobx';
 import {
   definedEntity,
   stateMachineFactory
-} from '../../../../src/mobus';
+} from 'mobus';
+import { observable, runInAction } from 'mobx';
 
 export const counterStore = observable({ count: 0 })
 

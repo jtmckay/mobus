@@ -1,6 +1,3 @@
-import { runInAction } from 'mobx';
-import { useEffect } from 'preact/hooks';
-import { v4 as uuid } from 'uuid';
 import {
   MEvent,
   StoreOperation,
@@ -8,7 +5,10 @@ import {
   definedEntity,
   effectFactory,
   stateMachineFactory,
-} from '../../../../src/mobus';
+} from 'mobus';
+import { runInAction } from 'mobx';
+import { useEffect } from 'preact/hooks';
+import { v4 as uuid } from 'uuid';
 import { ENTITY, EVENT } from './pedometer.constants';
 import { Pedometer, pedometerStore } from './pedometer.store';
 
