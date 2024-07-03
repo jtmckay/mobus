@@ -40,12 +40,21 @@ export const increment = commandFactory<void>({
 import { definedEntity, stateMachineFactory } from 'mobus';
 import { observable, runInAction } from 'mobx';
 
-export const counterStore = observable({ count: 0 })
+export const counterStore = observable({ count: 0 }) // Turn object into MobX observable
 
 export const { commandFactory, subscribe } = stateMachineFactory('counter', {
-  wrapper: runInAction,
+  wrapper: runInAction, // MobX wrapper function
   storeSingle: counterStore
 });
+subscribe();
+
+export const increment = commandFactory<void>({
+  eventHandler: (entity) => {
+    const counter = definedEntity(entity)
+    counter.count++;
+    return counter
+  }
+})
 ```
 Then render it in React, Preact etc.
 ```tsx
@@ -62,7 +71,7 @@ const Counter = observer(() => (
 ### Optimistic updates
 This example uses a more advanced store. EG: Map<string, Pedometer>.
 ```ts
-import { stateMachineFactory } from 'mobus';
+import { stateMachineFactory, WithID } from 'mobus';
 import { pedometerStore } from './pedometer.store';
 
 export const { commandFactory, subscribe } = stateMachineFactory(ENTITY, { wrapper: runInAction, store: pedometerStore });
