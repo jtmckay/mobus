@@ -1,5 +1,5 @@
 # Mo'Bus
-Supercharge your state management with events, and predictable pure function state machines.
+Supercharge your state management with events, predictable state machines, and extensible streams.
 
 Adapt any existing class, MobX store, or Javascript Object to be event driven. Great for 3D projects in ThreeJS.
 
